@@ -62,12 +62,9 @@ function formatBRL(value: number) {
 }
 
 const EMPTY_FORM: FormState = {
-  tipo: '',
-  cidade: 'Porto Alegre',
-  bairro: '',
-  area_m2: '',
-  quartos: '',
-  mobiliado: '',
+  tipo: '', finalidade: 'VENDA', cep: '', area_m2: '',
+  dormitorios: '', suites: '', banheiros: '', vagas_garagem: '',
+  condicao: '', mobilia: '', orientacao_solar: '', posicao: '', tipo_piso: '',
 }
 
 const TIPOS: Tipo[] = ['Apartamento', 'Casa', 'Cobertura', 'Sala Comercial', 'Loja', 'Terreno']
@@ -221,15 +218,26 @@ export default function PrecificarPage() {
               <label className="block text-xs font-medium text-[#111827] mb-2">
                 Tipo do imóvel <span className="text-red-500">*</span>
               </label>
-              <div className="grid grid-cols-3 gap-2">
-                {TIPOS.map((t) => (
-                  <button key={t} type="button" onClick={() => set('tipo', t)} className={pillBtn(form.tipo === t)}>
-                    {t}
+              <div className="grid grid-cols-4 gap-2">
+                {(['APARTAMENTO', 'CASA', 'COMERCIAL', 'TERRENO'] as Tipo[]).map(t => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => set('tipo', t)}
+                    className={pillBtn(form.tipo === t)}
+                  >
+                    {t === 'APARTAMENTO' ? 'Apartamento'
+                      : t === 'CASA' ? 'Casa'
+                      : t === 'COMERCIAL' ? 'Comercial'
+                      : 'Terreno'}
                   </button>
                 ))}
               </div>
-              {fieldErrors.tipo && <p className="text-red-500 text-xs mt-1">{fieldErrors.tipo}</p>}
+              {fieldErrors.tipo && (
+                <p className="text-red-500 text-xs mt-1">{fieldErrors.tipo}</p>
+              )}
             </div>
+
 
             {/* Cidade + Bairro */}
             <div className="grid grid-cols-2 gap-4 mb-4">

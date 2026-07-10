@@ -1,5 +1,6 @@
 import { readFileSync } from 'fs'
 import { join } from 'path'
+import { carregarSerieIVGR, fatorAtualizacao } from './ivgr'
 
 export type TipoImovel = 'APARTAMENTO' | 'CASA' | 'TERRENO' | 'COMERCIAL'
 
@@ -34,6 +35,7 @@ export interface ResultadoPrecificacao {
   comparaveis_utilizados: number
   bairro_referencia: string
   confianca: 'ALTA' | 'MEDIA' | 'BAIXA' | 'INSUFICIENTE'
+  ivgr_aplicado: boolean
 }
 
 interface RegistroITBI {
@@ -43,7 +45,7 @@ interface RegistroITBI {
   tipo: string
   area_m2: number
   preco: number
-  preco_m2: number
+  mes_referencia: string // 'YYYY-MM' — usado para fator IVG-R
 }
 
 const ITBI_TYPE_MAP: Record<TipoImovel, string[]> = {
@@ -69,6 +71,13 @@ const ITBI_TYPE_MAP: Record<TipoImovel, string[]> = {
 
 // In-process cache — populated once per server lifecycle
 let _cache: RegistroITBI[] | null = null
+
+function parseMesReferencia(dateStr: string): string {
+  // Formato esperado: 'YYYY/MM/DD HH:MM:SS' → 'YYYY-MM'
+  const trimmed = dateStr.trim()
+  if (!trimmed) return ''
+  return `${trimmed.slice(0, 4)}-${trimmed.slice(5, 7)}`
+}
 
 function carregarDados(): RegistroITBI[] {
   if (_cache) return _cache
@@ -97,8 +106,12 @@ function carregarDados(): RegistroITBI[] {
 
       if (!preco || !area || area < 10 || !cep || cep.length < 5) continue
 
-      const preco_m2 = preco / area
-      if (preco_m2 < 500 || preco_m2 > 80000) continue
+      // Sanity check sem IVG-R — exclui outliers brutos
+      const preco_m2_bruto = preco / area
+      if (preco_m2_bruto < 500 || preco_m2_bruto > 80000) continue
+
+      // data_pagamento preferida; fallback para data_estimativa
+      const mesReferencia = parseMesReferencia(cols[1]) || parseMesReferencia(cols[0])
 
       registros.push({
         cep,
@@ -107,7 +120,7 @@ function carregarDados(): RegistroITBI[] {
         tipo,
         area_m2: area,
         preco,
-        preco_m2,
+        mes_referencia: mesReferencia,
       })
     }
   }
@@ -155,7 +168,7 @@ function filtrarComparaveis(
   return { registros: porTipo, escopo: 'cidade' }
 }
 
-export function calcularPrecificacao(dados: DadosImovel): ResultadoPrecificacao {
+export async function calcularPrecificacao(dados: DadosImovel): Promise<ResultadoPrecificacao> {
   const registros = carregarDados()
   const tiposITBI = ITBI_TYPE_MAP[dados.tipo]
   const cepPrefix = dados.cep.slice(0, 5)
@@ -168,7 +181,22 @@ export function calcularPrecificacao(dados: DadosImovel): ResultadoPrecificacao 
     bairro,
   )
 
-  const precosMedioM2 = comparaveis.map((r) => r.preco_m2)
+  // Tenta carregar a série IVG-R; se falhar, segue sem atualização
+  let serieIVGR: Record<string, number> | null = null
+  try {
+    serieIVGR = await carregarSerieIVGR()
+  } catch {
+    // API do Bacen indisponível — usa preços nominais
+  }
+
+  const precosMedioM2 = comparaveis.map((r) => {
+    let ft = 1
+    if (serieIVGR && r.mes_referencia) {
+      ft = fatorAtualizacao(r.mes_referencia, serieIVGR)
+    }
+    return (r.preco * ft) / r.area_m2
+  })
+
   const precoMedioM2 = mediana(precosMedioM2)
 
   if (!precoMedioM2 || comparaveis.length === 0) {
@@ -180,6 +208,7 @@ export function calcularPrecificacao(dados: DadosImovel): ResultadoPrecificacao 
       comparaveis_utilizados: 0,
       bairro_referencia: bairro,
       confianca: 'INSUFICIENTE',
+      ivgr_aplicado: false,
     }
   }
 
@@ -203,5 +232,6 @@ export function calcularPrecificacao(dados: DadosImovel): ResultadoPrecificacao 
     comparaveis_utilizados: comparaveis.length,
     bairro_referencia: bairro || `prefixo CEP ${cepPrefix}`,
     confianca,
+    ivgr_aplicado: serieIVGR !== null,
   }
 }

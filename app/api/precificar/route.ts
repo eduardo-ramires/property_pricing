@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
     )
   }
 
-  const precificacao = calcularPrecificacao(resultado.data)
+  const precificacao = await calcularPrecificacao(resultado.data)
 
   return NextResponse.json({
     entrada: resultado.data,
