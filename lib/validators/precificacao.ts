@@ -7,6 +7,7 @@ export const precificacaoInputSchema = z.object({
   areaM2: z.number().positive("areaM2 deve ser maior que zero"),
   quartos: z.number().int().nonnegative(),
   mobiliado: z.boolean(),
+  precoDesejado: z.number().positive("precoDesejado deve ser maior que zero").optional(),
 });
 
 export type PrecificacaoInput = z.infer<typeof precificacaoInputSchema>;

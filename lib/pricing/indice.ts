@@ -17,6 +17,9 @@ export interface InputPrecificacao {
   areaM2: number;
   quartos: number;
   mobiliado: boolean;
+  /** Preço que o usuário pretende pedir pelo imóvel, opcional — usado só para
+   *  mostrar o quanto ESSE valor específico desvia do preço justo estimado. */
+  precoDesejado?: number;
 }
 
 export interface AnaliseVendas {
@@ -38,13 +41,29 @@ export interface AnaliseOfertas {
 
 export type Classificacao = "abaixo_do_mercado" | "dentro_do_mercado" | "acima_do_mercado";
 
+export interface AvaliacaoPrecoDesejado {
+  precoDesejado: number;
+  indiceDesvio: number;
+  classificacao: Classificacao;
+}
+
 export interface ResultadoPrecificacao {
   input: InputPrecificacao;
   vendas: AnaliseVendas | null;
   ofertas: AnaliseOfertas | null;
   indiceDesvio: number | null;
   classificacao: Classificacao | null;
+  /** Só preenchido quando o usuário informa precoDesejado E temos preço
+   *  justo (ITBI) calculado — compara o valor que ele quer pedir com o
+   *  preço justo, usando o mesmo critério de classificação. */
+  avaliacaoPrecoDesejado: AvaliacaoPrecoDesejado | null;
   avisos: string[];
+}
+
+function classificar(indiceDesvio: number): Classificacao {
+  if (indiceDesvio < -FAIXA_DENTRO_DO_MERCADO) return "abaixo_do_mercado";
+  if (indiceDesvio > FAIXA_DENTRO_DO_MERCADO) return "acima_do_mercado";
+  return "dentro_do_mercado";
 }
 
 export function calcularPrecificacao(input: InputPrecificacao): ResultadoPrecificacao {
@@ -76,13 +95,20 @@ export function calcularPrecificacao(input: InputPrecificacao): ResultadoPrecifi
   let classificacao: Classificacao | null = null;
   if (vendas && ofertas) {
     indiceDesvio = (ofertas.precoOfertadoEstimado - vendas.precoJustoEstimado) / vendas.precoJustoEstimado;
-    classificacao =
-      indiceDesvio < -FAIXA_DENTRO_DO_MERCADO
-        ? "abaixo_do_mercado"
-        : indiceDesvio > FAIXA_DENTRO_DO_MERCADO
-          ? "acima_do_mercado"
-          : "dentro_do_mercado";
+    classificacao = classificar(indiceDesvio);
   }
 
-  return { input, vendas, ofertas, indiceDesvio, classificacao, avisos };
+  let avaliacaoPrecoDesejado: AvaliacaoPrecoDesejado | null = null;
+  if (input.precoDesejado && vendas) {
+    const indiceDesvioDesejado = (input.precoDesejado - vendas.precoJustoEstimado) / vendas.precoJustoEstimado;
+    avaliacaoPrecoDesejado = {
+      precoDesejado: input.precoDesejado,
+      indiceDesvio: indiceDesvioDesejado,
+      classificacao: classificar(indiceDesvioDesejado),
+    };
+  } else if (input.precoDesejado && !vendas) {
+    avisos.push("Não foi possível avaliar o preço desejado: sem preço justo (ITBI) calculado para comparação.");
+  }
+
+  return { input, vendas, ofertas, indiceDesvio, classificacao, avaliacaoPrecoDesejado, avisos };
 }

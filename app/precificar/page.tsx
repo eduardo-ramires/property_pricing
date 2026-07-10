@@ -16,6 +16,7 @@ interface FormState {
   finalidade: Finalidade | ''
   cep: string
   area_m2: string
+  preco_desejado: string
   dormitorios: string
   suites: string
   banheiros: string
@@ -52,11 +53,18 @@ interface AnaliseOfertas {
   comparaveis: Comparavel[]
 }
 
+interface AvaliacaoPrecoDesejado {
+  precoDesejado: number
+  indiceDesvio: number
+  classificacao: Classificacao
+}
+
 interface ResultadoPrecificacao {
   vendas: AnaliseVendas | null
   ofertas: AnaliseOfertas | null
   indiceDesvio: number | null
   classificacao: Classificacao | null
+  avaliacaoPrecoDesejado: AvaliacaoPrecoDesejado | null
   avisos: string[]
 }
 
@@ -115,7 +123,7 @@ async function buscarEnderecoPorCep(cepLimpo: string): Promise<EnderecoViaCep> {
 }
 
 const EMPTY_FORM: FormState = {
-  tipo: '', finalidade: '', cep: '', area_m2: '',
+  tipo: '', finalidade: '', cep: '', area_m2: '', preco_desejado: '',
   dormitorios: '', suites: '', banheiros: '', vagas_garagem: '',
   condicao: '', mobilia: '', orientacao_solar: '', posicao: '', tipo_piso: '',
 }
@@ -176,6 +184,7 @@ export default function PrecificarPage() {
         areaM2: parseFloat(form.area_m2),
         quartos: form.dormitorios ? parseInt(form.dormitorios, 10) : 0,
         mobiliado: form.mobilia ? MOBILIA_PARA_SERVICO[form.mobilia] : false,
+        ...(form.preco_desejado ? { precoDesejado: parseFloat(form.preco_desejado) } : {}),
       }
 
       const res = await fetch('/api/precificacao', {
@@ -350,6 +359,25 @@ export default function PrecificarPage() {
                   <p className="text-red-500 text-xs mt-1">{fieldErrors.area_m2}</p>
                 )}
               </div>
+            </div>
+
+            {/* Preço desejado */}
+            <div className="max-w-[240px] mt-4">
+              <label className="block text-xs font-medium text-[#111827] mb-1.5">
+                Preço que você quer pedir (R$) <span className="text-[11px] text-[#6b7280]">opcional</span>
+              </label>
+              <input
+                type="number"
+                placeholder="Ex: 350000"
+                min="1"
+                step="0.01"
+                value={form.preco_desejado}
+                onChange={e => set('preco_desejado', e.target.value)}
+                className={inputClass()}
+              />
+              <p className="text-[11px] text-[#6b7280] mt-1">
+                Informe pra ver se o valor que você quer pedir está abaixo, dentro ou acima do preço justo calculado.
+              </p>
             </div>
 
             {/* Actions */}
@@ -589,6 +617,31 @@ export default function PrecificarPage() {
                       </p>
                     )}
                   </div>
+
+                  {/* Avaliação do preço desejado pelo usuário */}
+                  {resultado.avaliacaoPrecoDesejado && (
+                    <div className="mb-4 rounded-md border border-[#e5e7eb] px-4 py-3 flex items-center justify-between">
+                      <div>
+                        <p className="text-[11px] text-[#6b7280]">O preço que você quer pedir</p>
+                        <p className="text-lg font-semibold text-[#111827]">
+                          {formatBRL(resultado.avaliacaoPrecoDesejado.precoDesejado)}
+                        </p>
+                        <p className="text-xs text-[#6b7280]">
+                          {resultado.avaliacaoPrecoDesejado.indiceDesvio > 0 ? '+' : ''}
+                          {(resultado.avaliacaoPrecoDesejado.indiceDesvio * 100).toFixed(1)}% em relação ao preço
+                          justo estimado
+                        </p>
+                      </div>
+                      <span
+                        className={`inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1 rounded-full ${CLASSIFICACAO_CONFIG[resultado.avaliacaoPrecoDesejado.classificacao].badge}`}
+                      >
+                        <span
+                          className={`w-1.5 h-1.5 rounded-full ${CLASSIFICACAO_CONFIG[resultado.avaliacaoPrecoDesejado.classificacao].dot}`}
+                        />
+                        {CLASSIFICACAO_CONFIG[resultado.avaliacaoPrecoDesejado.classificacao].label}
+                      </span>
+                    </div>
+                  )}
 
                   {/* Stats */}
                   <div className="grid grid-cols-2 gap-px bg-[#e5e7eb] rounded-md overflow-hidden">
