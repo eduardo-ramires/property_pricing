@@ -1,0 +1,61 @@
+nohup: ignorando entrada
+Ids já coletados anteriormente: 20
+[venda] página 1/? — coletados: 0/500
+[venda] página 2/12729 — coletados: 0/500
+[venda] página 3/12729 — coletados: 0/500
+[venda] página 4/12729 — coletados: 0/500
+[venda] página 5/12729 — coletados: 0/500
+[venda] página 6/12729 — coletados: 0/500
+[venda] página 7/12729 — coletados: 0/500
+[venda] página 8/12729 — coletados: 0/500
+[venda] página 9/12729 — coletados: 0/500
+[venda] página 10/12729 — coletados: 0/500
+[venda] página 11/12729 — coletados: 0/500
+[venda] página 12/12729 — coletados: 0/500
+[venda] página 13/12729 — coletados: 0/500
+[venda] página 14/12729 — coletados: 0/500
+[venda] página 15/12729 — coletados: 0/500
+[venda] página 16/12729 — coletados: 0/500
+[venda] página 17/12729 — coletados: 0/500
+[venda] página 18/12729 — coletados: 0/500
+[venda] página 19/12729 — coletados: 0/500
+[venda] página 20/12729 — coletados: 0/500
+[venda] página 21/12729 — coletados: 0/500
+[venda] página 22/12729 — coletados: 0/500
+[venda] página 23/12729 — coletados: 0/500
+[venda] página 24/12729 — coletados: 0/500
+[venda] página 25/12729 — coletados: 0/500
+[venda] página 26/12729 — coletados: 0/500
+[venda] página 27/12729 — coletados: 0/500
+[venda] página 28/12729 — coletados: 0/500
+[venda] página 29/12729 — coletados: 0/500
+[venda] página 30/12729 — coletados: 0/500
+[venda] página 31/12729 — coletados: 0/500
+[venda] página 32/12729 — coletados: 0/500
+[venda] página 33/12729 — coletados: 0/500
+[venda] página 34/12729 — coletados: 0/500
+[venda] página 35/12729 — coletados: 0/500
+[venda] página 36/12729 — coletados: 0/500
+[venda] página 37/12729 — coletados: 0/500
+[venda] página 38/12729 — coletados: 0/500
+[venda] página 39/12729 — coletados: 0/500
+[venda] página 40/12729 — coletados: 0/500
+[venda] página 41/12729 — coletados: 0/500
+[venda] página 42/12729 — coletados: 0/500
+[venda] página 43/12729 — coletados: 0/500
+[venda] página 44/12729 — coletados: 0/500
+[venda] página 45/12729 — coletados: 0/500
+[venda] página 46/12729 — coletados: 0/500
+[venda] página 47/12729 — coletados: 0/500
+[venda] página 48/12729 — coletados: 0/500
+[venda] página 49/12729 — coletados: 0/500
+[venda] página 50/12729 — coletados: 0/500
+[venda] página 51/12729 — coletados: 0/500
+[venda] página 52/12729 — coletados: 0/500
+[venda] página 53/12729 — coletados: 0/500
+Erro fatal: SyntaxError: Expected ',' or '}' after property value in JSON at position 4657 (line 1 column 4658)
+    at JSON.parse (<anonymous>)
+    at extrairItens (file:///home/kaiofernandes/Documentos/projetosKaio/spark/property_pricing/scripts/scraper-jetlar.mjs:111:22)
+    at coletarTransacao (file:///home/kaiofernandes/Documentos/projetosKaio/spark/property_pricing/scripts/scraper-jetlar.mjs:195:42)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async main (file:///home/kaiofernandes/Documentos/projetosKaio/spark/property_pricing/scripts/scraper-jetlar.mjs:259:23)
