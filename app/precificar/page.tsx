@@ -597,8 +597,23 @@ export default function PrecificarPage() {
                 <>
                   {/* Preço principal */}
                   <div className="text-center py-5">
-                    <p className="text-[11px] font-semibold text-[#6b7280] uppercase tracking-widest mb-2">
+                    <p className="flex items-center justify-center gap-1.5 text-[11px] font-semibold text-[#6b7280] uppercase tracking-widest mb-2">
                       Preço de venda estimado
+                      <span className="group relative inline-flex normal-case tracking-normal">
+                        <span
+                          tabIndex={0}
+                          className="flex h-4 w-4 cursor-help items-center justify-center rounded-full bg-[#e5e7eb] text-[10px] font-bold text-[#6b7280] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#284670]"
+                        >
+                          ?
+                        </span>
+                        <span
+                          role="tooltip"
+                          className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-2 w-60 -translate-x-1/2 rounded-md bg-[#111827] px-3 py-2 text-[11px] font-normal leading-snug text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
+                        >
+                          Valor estimado com base em transações e ofertas da região — não é um preço exato, e sim
+                          uma referência para apoiar a decisão.
+                        </span>
+                      </span>
                     </p>
                     <p className="text-4xl font-bold text-[#284670] leading-none">
                       {resultado.vendas ? formatBRL(resultado.vendas.precoJustoEstimado) : '—'}
