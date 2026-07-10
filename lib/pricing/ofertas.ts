@@ -49,12 +49,23 @@ function carregarOfertas(): OfertaImovel[] {
   }
 
   const conteudo = readFileSync(CAMINHO_ARQUIVO, "utf8");
-  const registros: Record<string, string>[] = parse(conteudo, {
-    delimiter: ";",
-    columns: true,
-    skip_empty_lines: true,
-    trim: true,
-  });
+
+  let registros: Record<string, string>[];
+  try {
+    registros = parse(conteudo, {
+      delimiter: ";",
+      columns: true,
+      skip_empty_lines: true,
+      trim: true,
+    });
+  } catch (err) {
+    // O CSV é escrito por um scraper que roda em background e pode ter
+    // linhas corrompidas se dois processos gravarem ao mesmo tempo. Preferir
+    // "amostra insuficiente" a derrubar o endpoint inteiro com 500.
+    console.error("Falha ao parsear dataset/jetlar-imoveis.csv:", err);
+    ofertasCache = [];
+    return ofertasCache;
+  }
 
   ofertasCache = registros
     .filter((registro) => registro.transacao === "venda")

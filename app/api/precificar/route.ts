@@ -4,18 +4,16 @@ import { calcularPrecificacao } from '@/lib/pricing';
 
 const Schema = z.object({
   tipo: z.enum(['APARTAMENTO', 'CASA', 'TERRENO', 'COMERCIAL'], {
-    required_error: 'Tipo do imóvel é obrigatório',
-    message: 'Tipo deve ser APARTAMENTO, CASA, TERRENO ou COMERCIAL',
+    error: 'Tipo deve ser APARTAMENTO, CASA, TERRENO ou COMERCIAL',
   }),
   finalidade: z.enum(['VENDA', 'LOCACAO'], {
-    required_error: 'Finalidade é obrigatória',
-    message: 'Finalidade deve ser VENDA ou LOCACAO',
+    error: 'Finalidade deve ser VENDA ou LOCACAO',
   }),
   cep: z
     .string()
     .regex(/^\d{8}$/, 'CEP deve conter exatamente 8 dígitos numéricos'),
   area_m2: z
-    .number({ required_error: 'Área em m² é obrigatória' })
+    .number({ error: 'Área em m² é obrigatória' })
     .positive('Área deve ser maior que zero'),
   dormitorios: z.number().int().min(0).optional(),
   suites: z.number().int().min(0).optional(),

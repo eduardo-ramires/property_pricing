@@ -1,6 +1,0 @@
-{
-  "/api/health/route": "app/api/health/route.js",
-  "/api/precificar/route": "app/api/precificar/route.js",
-  "/page": "app/page.js",
-  "/precificar/page": "app/precificar/page.js"
-}
