@@ -376,7 +376,7 @@ export default function PrecificarPage() {
                 className={inputClass()}
               />
               <p className="text-[11px] text-[#6b7280] mt-1">
-                Informe pra ver se o valor que você quer pedir está abaixo, dentro ou acima do preço justo calculado.
+                Informe pra ver se o valor que você quer pedir está abaixo, dentro ou acima do preço de venda estimado.
               </p>
             </div>
 
@@ -598,7 +598,7 @@ export default function PrecificarPage() {
                   {/* Preço principal */}
                   <div className="text-center py-5">
                     <p className="text-[11px] font-semibold text-[#6b7280] uppercase tracking-widest mb-2">
-                      Preço justo estimado (ITBI)
+                      Preço de venda estimado
                     </p>
                     <p className="text-4xl font-bold text-[#284670] leading-none">
                       {resultado.vendas ? formatBRL(resultado.vendas.precoJustoEstimado) : '—'}
@@ -629,7 +629,7 @@ export default function PrecificarPage() {
                         <p className="text-xs text-[#6b7280]">
                           {resultado.avaliacaoPrecoDesejado.indiceDesvio > 0 ? '+' : ''}
                           {(resultado.avaliacaoPrecoDesejado.indiceDesvio * 100).toFixed(1)}% em relação ao preço
-                          justo estimado
+                          de venda estimado
                         </p>
                       </div>
                       <span
