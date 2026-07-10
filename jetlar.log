@@ -1,5 +1,5 @@
 nohup: ignorando entrada
-Ids já coletados anteriormente: 12
+Ids já coletados anteriormente: 20
 [venda] página 1/? — coletados: 0/500
 [venda] página 2/12729 — coletados: 0/500
 [venda] página 3/12729 — coletados: 0/500
@@ -49,10 +49,10 @@ Ids já coletados anteriormente: 12
 [venda] página 47/12729 — coletados: 0/500
 [venda] página 48/12729 — coletados: 0/500
 [venda] página 49/12729 — coletados: 0/500
-[venda] página 50/12729 — coletados: 3/500
-[venda] página 51/12729 — coletados: 4/500
-[venda] página 52/12729 — coletados: 4/500
-[venda] página 53/12729 — coletados: 8/500
+[venda] página 50/12729 — coletados: 0/500
+[venda] página 51/12729 — coletados: 0/500
+[venda] página 52/12729 — coletados: 0/500
+[venda] página 53/12729 — coletados: 0/500
 Erro fatal: SyntaxError: Expected ',' or '}' after property value in JSON at position 4657 (line 1 column 4658)
     at JSON.parse (<anonymous>)
     at extrairItens (file:///home/kaiofernandes/Documentos/projetosKaio/spark/property_pricing/scripts/scraper-jetlar.mjs:111:22)

@@ -107,8 +107,15 @@ function extrairItens(html) {
   const fim = html.indexOf(marcadorFim, inicioArray);
   if (fim === -1) return { items: [], totalItems: null };
 
-  const bruto = html.slice(inicioArray, fim + 2).replace(/\\"/g, '"');
-  const items = JSON.parse(bruto);
+  const bruto = html.slice(inicioArray, fim + 2);
+
+  // `bruto` está escapado como se fosse o CONTEÚDO de uma string JSON (é
+  // assim que o RSC do Next.js embute o payload no HTML). Envolver em aspas
+  // e rodar JSON.parse uma vez faz esse desescape corretamente — inclusive
+  // quando um título tem aspas literais (ex: `Cobertura "Vista Mar"`), caso
+  // em que um replace ingênuo de `\"` por `"` corrompe o JSON.
+  const jsonNivelUm = JSON.parse(`"${bruto}"`);
+  const items = JSON.parse(jsonNivelUm);
 
   const totalMatch = html.match(/\\"totalItems\\":(\d+)/);
   const totalItems = totalMatch ? Number(totalMatch[1]) : null;
@@ -192,7 +199,16 @@ async function coletarTransacao(transacao, path, idsVistos) {
       continue;
     }
 
-    const { items, totalItems: total } = extrairItens(html);
+    let items;
+    let total;
+    try {
+      ({ items, totalItems: total } = extrairItens(html));
+    } catch (err) {
+      console.warn(`Falha ao extrair itens da página ${pagina} (${transacao}): ${err.message}. Pulando página.`);
+      pagina++;
+      await sleep(DELAY_MS);
+      continue;
+    }
     if (total !== null) totalItems = total;
 
     if (items.length === 0) {
