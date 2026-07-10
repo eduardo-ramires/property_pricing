@@ -58,7 +58,7 @@ function maskCep(raw: string) {
 }
 
 const EMPTY_FORM: FormState = {
-  tipo: '', finalidade: '', cep: '', area_m2: '',
+  tipo: '', finalidade: 'VENDA', cep: '', area_m2: '',
   dormitorios: '', suites: '', banheiros: '', vagas_garagem: '',
   condicao: '', mobilia: '', orientacao_solar: '', posicao: '', tipo_piso: '',
 }
@@ -232,27 +232,6 @@ export default function PrecificarPage() {
               )}
             </div>
 
-            {/* Finalidade */}
-            <div className="mb-4">
-              <label className="block text-xs font-medium text-[#111827] mb-2">
-                Finalidade <span className="text-red-500">*</span>
-              </label>
-              <div className="grid grid-cols-2 gap-2 max-w-[240px]">
-                {(['VENDA', 'LOCACAO'] as Finalidade[]).map(f => (
-                  <button
-                    key={f}
-                    type="button"
-                    onClick={() => set('finalidade', f)}
-                    className={pillBtn(form.finalidade === f)}
-                  >
-                    {f === 'VENDA' ? 'Venda' : 'Locação'}
-                  </button>
-                ))}
-              </div>
-              {fieldErrors.finalidade && (
-                <p className="text-red-500 text-xs mt-1">{fieldErrors.finalidade}</p>
-              )}
-            </div>
 
             {/* CEP + Área */}
             <div className="grid grid-cols-2 gap-4">
