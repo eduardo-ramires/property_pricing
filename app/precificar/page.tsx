@@ -20,32 +20,24 @@ interface FormState {
   padrao_construtivo: PadraoConstrutivo | ''
 }
 
-interface AnaliseVendas {
-  amostra: number
-  precoM2Mediana: number
-  nivelFiltro: string
-  precoJustoEstimado: number
-  fatorEstadoConservacao: number
-  fatorPadraoConstrutivo: number
-}
-
-interface Comparavel {
+interface MemoriaCalculoItem {
   id: string
-  titulo: string
-  quartos: number | null
-  vagas: number | null
-  mobiliado: boolean | null
-  areaM2: number
-  preco: number
-  url: string
+  titulo?: string
+  url?: string
+  precoTratado: number
+  vu: number
+  vuPosOferta: number
+  fa: number
+  fl: number
+  fp: number
+  fc: number
+  somaAditiva: number
+  vuh: number
 }
 
-interface AnaliseOfertas {
-  amostra: number
-  precoM2Mediana: number
-  nivelFiltro: string
-  precoOfertadoEstimado: number
-  comparaveis: Comparavel[]
+interface Rejeitado {
+  id: string
+  motivo: string
 }
 
 interface AvaliacaoPrecoDesejado {
@@ -55,17 +47,39 @@ interface AvaliacaoPrecoDesejado {
 }
 
 interface ResultadoPrecificacao {
-  vendas: AnaliseVendas | null
-  ofertas: AnaliseOfertas | null
-  indiceDesvio: number | null
-  classificacao: Classificacao | null
+  status: 'ok' | 'alerta' | 'erro'
+  alertas: string[]
+  motivoErro: string | null
+  nComparaveisUtilizados: number
+  rejeitados: Rejeitado[]
+  descartadosOutlier: string[]
+  memoriaCalculo: MemoriaCalculoItem[]
+  estatisticas: {
+    vuMedio: number | null
+    desvioPadrao: number | null
+    cvPercentual: number | null
+  }
+  resultado: {
+    valorBruto: number | null
+    valorAdotado: number | null
+    intervaloMin: number | null
+    intervaloMax: number | null
+    campoArbitrioMin: number | null
+    campoArbitrioMax: number | null
+  }
+  ruleVersion: string
   avaliacaoPrecoDesejado: AvaliacaoPrecoDesejado | null
   avisos: string[]
 }
 
+const MOTIVO_ERRO_LABEL: Record<string, string> = {
+  AMOSTRA_INSUFICIENTE:
+    'Não há comparáveis suficientes (mínimo 3) para esse bairro/tipo depois dos filtros de área e consistência. Tente um CEP vizinho.',
+}
+
 const TIPOS: Tipo[] = ['APARTAMENTO', 'CASA', 'CHACARA', 'COBERTURA', 'SALA_COMERCIAL', 'LOJA', 'TERRENO']
 
-// Também é o texto enviado ao serviço (vocabulário do Jetlar/ITBI, normalizado internamente).
+// Também é o texto enviado ao serviço (vocabulário do RGI/ITBI, normalizado internamente).
 const TIPO_LABEL: Record<Tipo, string> = {
   APARTAMENTO: 'Apartamento',
   CASA: 'Casa',
@@ -76,9 +90,9 @@ const TIPO_LABEL: Record<Tipo, string> = {
   TERRENO: 'Terreno',
 }
 
-// Escala Heidecke simplificada — deprecia o preço justo conforme o estado de
-// conservação real do imóvel (a base do ITBI reflete o padrão médio da
-// região, não o imóvel específico).
+// Escala Heidecke simplificada — deprecia o valor de venda conforme o estado
+// de conservação real do imóvel (os comparáveis não têm esse dado
+// individual, então o ajuste entra uma vez no agregado final).
 const ESTADO_CONSERVACAO_OPCOES: { valor: EstadoConservacao; label: string; fator: string; servico: string }[] = [
   { valor: 'NOVO', label: 'Novo', fator: '1,00', servico: 'novo' },
   { valor: 'BOM', label: 'Bom', fator: '0,97', servico: 'bom' },
@@ -170,7 +184,6 @@ export default function PrecificarPage() {
 
   function validateStep1() {
     const errs: Record<string, string> = {}
-    if (form.quartos === '' || parseInt(form.quartos, 10) < 0) errs.quartos = 'Informe o número de quartos'
     if (!form.estado_conservacao) errs.estado_conservacao = 'Informe o estado de conservação'
     if (!form.padrao_construtivo) errs.padrao_construtivo = 'Informe o padrão construtivo'
     setFieldErrors(errs)
@@ -213,9 +226,9 @@ export default function PrecificarPage() {
         bairro: endereco.bairro,
         tipo: TIPO_LABEL[form.tipo as Tipo],
         areaM2: parseFloat(form.area_m2),
-        quartos: parseInt(form.quartos, 10),
         estadoConservacao: estadoConservacao?.servico,
         padraoConstrutivo: padraoConstrutivo?.servico,
+        ...(form.quartos ? { quartos: parseInt(form.quartos, 10) } : {}),
         ...(form.vaga_garagem ? { vagas: parseInt(form.vaga_garagem, 10) } : {}),
         ...(form.banheiros ? { banheiros: parseInt(form.banheiros, 10) } : {}),
         ...(form.suites ? { suites: parseInt(form.suites, 10) } : {}),
@@ -262,23 +275,23 @@ export default function PrecificarPage() {
         : 'bg-white text-[#374151] border-[#e5e7eb] hover:border-[#284670] hover:text-[#284670]'
     }`
 
-  const classificacaoCfg = resultado?.classificacao ? CLASSIFICACAO_CONFIG[resultado.classificacao] : null
+  const classificacaoCfg = resultado?.avaliacaoPrecoDesejado
+    ? CLASSIFICACAO_CONFIG[resultado.avaliacaoPrecoDesejado.classificacao]
+    : null
+
+  const temResultadoValido = resultado?.status !== 'erro' && resultado?.resultado.valorAdotado !== null
 
   return (
     <div className="min-h-screen bg-[#f3f4f6] flex flex-col">
       {/* Topbar — logo trocada aqui como preview de uma feature futura (integração com o Jetimob CRM) */}
       <header className="bg-[#284670] h-[55px] flex items-center px-6 shrink-0 shadow-sm">
         {/* eslint-disable-next-line @next/next/no-img-element -- svg estático simples, sem otimização necessária */}
-        <img src="/imagens/logo_jetimob_crm_light.svg" alt="Jetimob CRM" className="h-6 w-auto" />
+        <img src="/imagens/logo_jetimob_crm_dark.svg" alt="Jetimob CRM" className="h-6 w-auto" />
       </header>
 
       {/* Main content */}
       <main className="flex-1 w-full px-6 py-6">
         <h1 className="text-xl font-bold text-[#111827] mb-1">Precificar Imóvel</h1>
-        <p className="text-xs text-[#6b7280] mb-5">
-          Comparamos vendas reais (ITBI) com ofertas ativas (Jetlar) para Porto Alegre. O bairro é resolvido
-          automaticamente a partir do CEP.
-        </p>
 
         {/* ── STEP 0 — Dados Básicos ── */}
         <div
@@ -361,8 +374,7 @@ export default function PrecificarPage() {
                 className={inputClass()}
               />
               <p className="text-[11px] text-[#6b7280] mt-1">
-                Informe pra ver se o valor que você quer pedir está abaixo, dentro ou acima do preço de venda
-                estimado.
+                Informe pra ver se o valor que você quer pedir está abaixo, dentro ou acima do valor adotado.
               </p>
             </div>
 
@@ -396,7 +408,12 @@ export default function PrecificarPage() {
             >
               {resultado ? '✓' : '2'}
             </span>
-            <h2 className="text-sm font-semibold text-[#111827]">Características</h2>
+            <div className="flex items-baseline gap-2">
+              <h2 className="text-sm font-semibold text-[#111827]">Características</h2>
+              <span className="text-[11px] text-[#6b7280]">
+                quartos/banheiros/suítes são só cadastro — a metodologia (NBR 14.653-2) homogeneiza por área e vaga
+              </span>
+            </div>
           </div>
 
           <div className={`px-6 py-5 ${step < 1 ? 'pointer-events-none select-none' : ''}`}>
@@ -404,7 +421,7 @@ export default function PrecificarPage() {
             <div className="grid grid-cols-4 gap-3 mb-4">
               <div>
                 <label className="block text-xs font-medium text-[#111827] mb-1.5">
-                  Quartos <span className="text-red-500">*</span>
+                  Quartos <span className="text-[11px] text-[#6b7280]">opcional</span>
                 </label>
                 <input
                   type="number"
@@ -414,9 +431,8 @@ export default function PrecificarPage() {
                   value={form.quartos}
                   onChange={(e) => set('quartos', e.target.value)}
                   disabled={step < 1}
-                  className={inputClass(!!fieldErrors.quartos)}
+                  className={inputClass()}
                 />
-                {fieldErrors.quartos && <p className="text-red-500 text-xs mt-1">{fieldErrors.quartos}</p>}
               </div>
               <div>
                 <label className="block text-xs font-medium text-[#111827] mb-1.5">
@@ -484,7 +500,7 @@ export default function PrecificarPage() {
                 ))}
               </div>
               <p className="text-[11px] text-[#6b7280] mt-1.5">
-                Escala Heidecke simplificada — fator aplicado sobre o preço justo: Novo 1,00 · Bom 0,97 · Regular
+                Escala Heidecke simplificada — fator aplicado sobre o valor de venda: Novo 1,00 · Bom 0,97 · Regular
                 0,92 · Reparos simples 0,82.
               </p>
               {fieldErrors.estado_conservacao && (
@@ -511,7 +527,7 @@ export default function PrecificarPage() {
                 ))}
               </div>
               <p className="text-[11px] text-[#6b7280] mt-1.5">
-                Fator aplicado sobre o preço justo: Baixo 0,90 · Normal 1,00 · Alto 1,10.
+                Fator aplicado sobre o valor de venda: Baixo 0,90 · Normal 1,00 · Alto 1,10.
               </p>
               {fieldErrors.padrao_construtivo && (
                 <p className="text-red-500 text-xs mt-1">{fieldErrors.padrao_construtivo}</p>
@@ -575,17 +591,16 @@ export default function PrecificarPage() {
             </div>
 
             <div className="px-6 py-5">
-              {!resultado.vendas && !resultado.ofertas ? (
+              {!temResultadoValido ? (
                 <div className="bg-amber-50 border border-amber-200 rounded-md px-4 py-3 text-sm text-amber-800">
-                  ⚠ Dados insuficientes para precificar essa combinação de bairro/tipo. Tente um CEP próximo ou
-                  confira o tipo selecionado.
+                  ⚠ {resultado.motivoErro ? MOTIVO_ERRO_LABEL[resultado.motivoErro] ?? resultado.motivoErro : 'Não foi possível calcular o valor para esse imóvel.'}
                 </div>
               ) : (
                 <>
-                  {/* Preço principal */}
+                  {/* Valor principal */}
                   <div className="text-center py-5">
                     <p className="flex items-center justify-center gap-1.5 text-[11px] font-semibold text-[#6b7280] uppercase tracking-widest mb-2">
-                      Preço de venda estimado
+                      Valor de venda adotado
                       <span className="group relative inline-flex normal-case tracking-normal">
                         <span
                           tabIndex={0}
@@ -597,31 +612,27 @@ export default function PrecificarPage() {
                           role="tooltip"
                           className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-2 w-60 -translate-x-1/2 rounded-md bg-[#111827] px-3 py-2 text-[11px] font-normal leading-snug text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
                         >
-                          Valor estimado com base em transações e ofertas da região — não é um preço exato, e sim
-                          uma referência para apoiar a decisão do corretor.
+                          Estimado pelo Método Comparativo Direto de Dados de Mercado (NBR 14.653-2), com base em
+                          vendas reais e ofertas da região — não é um preço exato, e sim uma referência para apoiar
+                          a decisão do corretor.
                         </span>
                       </span>
                     </p>
                     <p className="text-4xl font-bold text-[#284670] leading-none">
-                      {resultado.vendas ? formatBRL(resultado.vendas.precoJustoEstimado) : '—'}
+                      {formatBRL(resultado.resultado.valorAdotado as number)}
                     </p>
-                    {resultado.vendas && (
-                      <p className="text-xs text-[#6b7280] mt-2">
-                        Ajustado por conservação ({resultado.vendas.fatorEstadoConservacao.toFixed(2)}) e padrão
-                        construtivo ({resultado.vendas.fatorPadraoConstrutivo.toFixed(2)})
-                      </p>
-                    )}
-                    {resultado.ofertas && (
+                    {resultado.resultado.intervaloMin !== null && resultado.resultado.intervaloMax !== null && (
                       <p className="text-sm text-[#6b7280] mt-2">
-                        Ofertado no mercado (Jetlar):&nbsp;
+                        Intervalo de confiança:&nbsp;
                         <span className="font-medium text-[#374151]">
-                          {formatBRL(resultado.ofertas.precoOfertadoEstimado)}
+                          {formatBRL(resultado.resultado.intervaloMin)} – {formatBRL(resultado.resultado.intervaloMax)}
                         </span>
                       </p>
                     )}
-                    {resultado.indiceDesvio !== null && (
+                    {resultado.resultado.campoArbitrioMin !== null && resultado.resultado.campoArbitrioMax !== null && (
                       <p className="text-xs text-[#6b7280] mt-1">
-                        Índice de desvio: {(resultado.indiceDesvio * 100).toFixed(1)}%
+                        Campo de arbítrio: {formatBRL(resultado.resultado.campoArbitrioMin)} –{' '}
+                        {formatBRL(resultado.resultado.campoArbitrioMax)}
                       </p>
                     )}
                   </div>
@@ -636,8 +647,8 @@ export default function PrecificarPage() {
                         </p>
                         <p className="text-xs text-[#6b7280]">
                           {resultado.avaliacaoPrecoDesejado.indiceDesvio > 0 ? '+' : ''}
-                          {(resultado.avaliacaoPrecoDesejado.indiceDesvio * 100).toFixed(1)}% em relação ao preço
-                          de venda estimado
+                          {(resultado.avaliacaoPrecoDesejado.indiceDesvio * 100).toFixed(1)}% em relação ao valor
+                          adotado
                         </p>
                       </div>
                       <span
@@ -652,24 +663,35 @@ export default function PrecificarPage() {
                   )}
 
                   {/* Stats */}
-                  <div className="grid grid-cols-2 gap-px bg-[#e5e7eb] rounded-md overflow-hidden">
+                  <div className="grid grid-cols-3 gap-px bg-[#e5e7eb] rounded-md overflow-hidden">
                     <div className="bg-[#f9fafb] px-4 py-3 text-center">
-                      <p className="text-[11px] text-[#6b7280] mb-1">Vendas reais usadas (ITBI)</p>
+                      <p className="text-[11px] text-[#6b7280] mb-1">Comparáveis usados</p>
                       <p className="text-sm font-semibold text-[#111827] leading-tight">
-                        {resultado.vendas ? `${resultado.vendas.amostra} · ${resultado.vendas.nivelFiltro}` : '—'}
+                        {resultado.nComparaveisUtilizados}
                       </p>
                     </div>
                     <div className="bg-[#f9fafb] px-4 py-3 text-center">
-                      <p className="text-[11px] text-[#6b7280] mb-1">Ofertas usadas (Jetlar)</p>
+                      <p className="text-[11px] text-[#6b7280] mb-1">R$/m² médio</p>
                       <p className="text-sm font-semibold text-[#111827] leading-tight">
-                        {resultado.ofertas ? `${resultado.ofertas.amostra} · ${resultado.ofertas.nivelFiltro}` : '—'}
+                        {resultado.estatisticas.vuMedio !== null ? formatBRL(resultado.estatisticas.vuMedio) : '—'}
+                      </p>
+                    </div>
+                    <div className="bg-[#f9fafb] px-4 py-3 text-center">
+                      <p className="text-[11px] text-[#6b7280] mb-1">Coeficiente de variação</p>
+                      <p className="text-sm font-semibold text-[#111827] leading-tight">
+                        {resultado.estatisticas.cvPercentual !== null
+                          ? `${resultado.estatisticas.cvPercentual.toFixed(1)}%`
+                          : '—'}
                       </p>
                     </div>
                   </div>
 
-                  {resultado.avisos.length > 0 && (
+                  {(resultado.alertas.length > 0 || resultado.avisos.length > 0) && (
                     <div className="mt-4 rounded-md bg-[#f9fafb] border border-[#e5e7eb] px-4 py-3 text-xs text-[#6b7280]">
                       <ul className="list-disc list-inside space-y-0.5">
+                        {resultado.alertas.map((alerta) => (
+                          <li key={alerta}>{alerta}</li>
+                        ))}
                         {resultado.avisos.map((aviso) => (
                           <li key={aviso}>{aviso}</li>
                         ))}
@@ -677,30 +699,40 @@ export default function PrecificarPage() {
                     </div>
                   )}
 
-                  {resultado.ofertas && resultado.ofertas.comparaveis.length > 0 && (
+                  {resultado.memoriaCalculo.length > 0 && (
                     <div className="mt-4">
                       <p className="text-[11px] font-semibold text-[#6b7280] uppercase tracking-widest mb-2">
-                        Comparáveis usados
+                        Memória de cálculo (comparáveis usados)
                       </p>
-                      <ul className="flex flex-col gap-2">
-                        {resultado.ofertas.comparaveis.map((c) => (
+                      <ul className="flex flex-col gap-2 max-h-80 overflow-y-auto">
+                        {resultado.memoriaCalculo.map((c) => (
                           <li key={c.id} className="rounded border border-[#e5e7eb] px-3 py-2 text-sm">
-                            <a
-                              href={c.url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-[#284670] hover:underline"
-                            >
-                              {c.titulo}
-                            </a>
+                            {c.url ? (
+                              <a
+                                href={c.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-[#284670] hover:underline"
+                              >
+                                {c.titulo ?? c.id}
+                              </a>
+                            ) : (
+                              <span className="text-[#111827] font-medium">{c.titulo ?? `Transação ITBI (${c.id})`}</span>
+                            )}
                             <p className="text-xs text-[#6b7280] mt-0.5">
-                              {c.areaM2}m² · {formatBRL(c.preco)}
-                              {c.mobiliado ? ' · mobiliado' : ''}
+                              VU: {formatBRL(c.vu)}/m² · Fa {c.fa.toFixed(4)} · VUh: {formatBRL(c.vuh)}/m²
                             </p>
                           </li>
                         ))}
                       </ul>
                     </div>
+                  )}
+
+                  {(resultado.rejeitados.length > 0 || resultado.descartadosOutlier.length > 0) && (
+                    <p className="text-[11px] text-[#6b7280] mt-3">
+                      {resultado.rejeitados.length} comparáveis rejeitados (área/ajuste fora da faixa) ·{' '}
+                      {resultado.descartadosOutlier.length} descartados como outlier de preço.
+                    </p>
                   )}
                 </>
               )}

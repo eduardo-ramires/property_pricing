@@ -121,6 +121,30 @@ export interface EstatisticasVendas {
   nivelFiltro: "bairro+tipo" | "bairro";
 }
 
+export interface TransacaoIndividual {
+  id: string;
+  areaM2: number;
+  baseDeCalculo: number;
+}
+
+/**
+ * Expõe as transações uma a uma (em vez da estatística agregada) para
+ * alimentar o motor PTAM, que faz sua própria estatística por comparável
+ * (rejeição, saneamento de outlier, CV) em vez de usar só a mediana.
+ */
+export function transacoesIndividuais(bairro: string, tipo: string): TransacaoIndividual[] {
+  const transacoes = carregarTransacoes();
+  const doBairro = transacoes.filter((transacao) => bairrosCorrespondem(transacao.bairro, bairro));
+  const doTipo = doBairro.filter((transacao) => tipoCorrespondeAFinalidade(tipo, transacao.finalidadeConstrucao));
+  const base = doTipo.length > 0 ? doTipo : doBairro;
+
+  return base.map((transacao, indice) => ({
+    id: `itbi-${indice}`,
+    areaM2: areaUtilizavel(transacao),
+    baseDeCalculo: transacao.baseDeCalculo,
+  }));
+}
+
 export function estatisticasVendas(bairro: string, tipo: string): EstatisticasVendas | null {
   const transacoes = carregarTransacoes();
   const doBairro = transacoes.filter((transacao) => bairrosCorrespondem(transacao.bairro, bairro));

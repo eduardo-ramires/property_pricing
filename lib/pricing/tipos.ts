@@ -2,9 +2,9 @@ import { normalizarTexto } from "./normalizar";
 
 /**
  * O ITBI classifica por "finalidade_construcao" (vocabulário do cadastro
- * fiscal municipal), enquanto o Jetlar usa um vocabulário mais coloquial
+ * fiscal municipal), enquanto o RGI usa um vocabulário mais coloquial
  * ("Apartamento", "Casa"...). Este mapeamento traduz o tipo recebido no
- * input (vocabulário Jetlar) para os valores equivalentes de
+ * input (vocabulário RGI) para os valores equivalentes de
  * finalidade_construcao no ITBI. Cobre os tipos mais comuns dos dois
  * datasets — tipos fora dessa lista caem no fallback por substring em
  * lib/pricing/itbi.ts.

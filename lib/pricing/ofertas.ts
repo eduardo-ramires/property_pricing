@@ -5,11 +5,11 @@ import { bairrosCorrespondem, normalizarTexto } from "./normalizar";
 import { AMOSTRA_MINIMA, media, mediana } from "./estatisticas";
 
 /**
- * Ofertas ativas coletadas do Jetlar (scripts/scraper-jetlar.mjs). Só
- * consideramos imóveis à venda: o ITBI só cobre transmissões de venda, então
- * não há referência para comparar aluguel.
+ * Ofertas ativas coletadas da Rede Gaúcha de Imóveis (scripts/scraper-rgi.mjs).
+ * Só consideramos imóveis à venda: o ITBI só cobre transmissões de venda,
+ * então não há referência para comparar aluguel.
  */
-const CAMINHO_ARQUIVO = join(process.cwd(), "dataset", "jetlar-imoveis.csv");
+const CAMINHO_ARQUIVO = join(process.cwd(), "dataset", "rgi-imoveis.csv");
 
 interface OfertaImovel {
   id: string;
@@ -65,7 +65,7 @@ function carregarOfertas(): OfertaImovel[] {
     // O CSV é escrito por um scraper que roda em background e pode ter
     // linhas corrompidas se dois processos gravarem ao mesmo tempo. Preferir
     // "amostra insuficiente" a derrubar o endpoint inteiro com 500.
-    console.error("Falha ao parsear dataset/jetlar-imoveis.csv:", err);
+    console.error("Falha ao parsear dataset/rgi-imoveis.csv:", err);
     ofertasCache = [];
     return ofertasCache;
   }
@@ -108,6 +108,36 @@ interface CriterioOpcional {
   chave: string;
   ativo: boolean;
   bate: (oferta: OfertaImovel) => boolean;
+}
+
+export interface OfertaIndividual {
+  id: string;
+  titulo: string;
+  areaM2: number;
+  preco: number;
+  possuiVaga: boolean;
+  url: string;
+}
+
+/**
+ * Expõe as ofertas uma a uma (em vez da estatística agregada) para
+ * alimentar o motor PTAM. Só filtra por cidade+bairro+tipo — a metodologia
+ * NBR 14.653-2 homogeneiza por área (Fa), não por quartos/mobília.
+ */
+export function ofertasIndividuais(cidade: string, bairro: string, tipo: string): OfertaIndividual[] {
+  const ofertas = carregarOfertas();
+  const daCidade = ofertas.filter((oferta) => normalizarTexto(oferta.cidade) === normalizarTexto(cidade));
+  const doBairro = daCidade.filter((oferta) => bairrosCorrespondem(oferta.bairro, bairro));
+  const doTipo = doBairro.filter((oferta) => normalizarTexto(oferta.tipo) === normalizarTexto(tipo));
+
+  return doTipo.map((oferta) => ({
+    id: oferta.id,
+    titulo: oferta.titulo,
+    areaM2: oferta.areaM2,
+    preco: oferta.preco,
+    possuiVaga: (oferta.vagas ?? 0) > 0,
+    url: oferta.url,
+  }));
 }
 
 export function estatisticasOfertas(params: {

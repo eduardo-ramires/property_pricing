@@ -1,76 +1,43 @@
-import { estatisticasVendas } from "./itbi";
-import { estatisticasOfertas, type EstatisticasOfertas } from "./ofertas";
-import { normalizarTexto } from "./normalizar";
+import { normalizarTexto } from "./normalizar.ts";
+import { montarComparaveis } from "./ptam/comparaveis.ts";
+import { calcularValorPtam } from "./ptam/engine.ts";
+import { aplicarAjusteAgregado } from "./ptam/ajusteAgregado.ts";
+import { EXPOENTE_AREA_PADRAO, FATOR_OFERTA_PADRAO, VALOR_VAGA_PADRAO } from "./ptam/constantes.ts";
+import type { Avaliando, EstadoConservacao, PadraoConstrutivo, ResultadoPtam } from "./ptam/tipos.ts";
+
+export type { EstadoConservacao, PadraoConstrutivo };
 
 // O dataset de ITBI (transações reais) cobre só Porto Alegre. O de ofertas
-// (Jetlar) é nacional, então essa checagem só afeta a perna "vendas".
+// (RGI) é nacional, então o motor PTAM sempre roda, mas fica só com
+// comparáveis do tipo "oferta" fora dessa cobertura.
 const CIDADE_COBERTA_PELO_ITBI = "Porto Alegre";
 
-// Faixa de tolerância ao redor do preço justo estimado para considerar o
-// anúncio "dentro do mercado" em vez de acima/abaixo.
+// Faixa de tolerância ao redor do valor adotado para considerar o preço
+// desejado pelo usuário "dentro do mercado" em vez de acima/abaixo.
 const FAIXA_DENTRO_DO_MERCADO = 0.1;
 
-export type EstadoConservacao = "novo" | "bom" | "regular" | "reparos_simples";
-export type PadraoConstrutivo = "baixo" | "normal" | "alto";
-
-// Escala Heidecke simplificada — deprecia o preço justo (base no ITBI, que
-// reflete o "padrão médio" da região) conforme o estado de conservação real
-// do imóvel avaliado.
-export const FATOR_ESTADO_CONSERVACAO: Record<EstadoConservacao, number> = {
-  novo: 1.0,
-  bom: 0.97,
-  regular: 0.92,
-  reparos_simples: 0.82,
-};
-
-// Ajusta o preço justo conforme o padrão construtivo (acabamento) do imóvel
-// em relação à média da região.
-export const FATOR_PADRAO_CONSTRUTIVO: Record<PadraoConstrutivo, number> = {
-  baixo: 0.9,
-  normal: 1.0,
-  alto: 1.1,
-};
+export type Classificacao = "abaixo_do_mercado" | "dentro_do_mercado" | "acima_do_mercado";
 
 export interface InputPrecificacao {
   cidade: string;
   bairro: string;
   tipo: string;
   areaM2: number;
-  quartos: number;
+  estadoConservacao: EstadoConservacao;
+  padraoConstrutivo: PadraoConstrutivo;
+  /** Metadados de contexto — a metodologia NBR 14.653-2 (Método Comparativo
+   *  Direto de Dados de Mercado) homogeneiza por área e vaga, não por
+   *  quartos/banheiros/suítes/mobília. Esses campos ficam só informativos
+   *  no resultado, não entram no cálculo do valor. */
+  quartos?: number;
   vagas?: number;
   banheiros?: number;
   suites?: number;
   mobiliado?: boolean;
-  /** Ajustam o preço justo (base ITBI) para refletir o imóvel específico —
-   *  sem informar, o preço justo fica na média/mediana "crua" da região. */
-  estadoConservacao?: EstadoConservacao;
-  padraoConstrutivo?: PadraoConstrutivo;
   /** Preço que o usuário pretende pedir pelo imóvel, opcional — usado só para
-   *  mostrar o quanto ESSE valor específico desvia do preço justo estimado. */
+   *  mostrar o quanto ESSE valor específico desvia do valor adotado. */
   precoDesejado?: number;
 }
-
-export interface AnaliseVendas {
-  amostra: number;
-  precoM2Mediana: number;
-  precoM2Media: number;
-  nivelFiltro: string;
-  /** Preço justo já com os fatores de conservação/padrão construtivo aplicados. */
-  precoJustoEstimado: number;
-  fatorEstadoConservacao: number;
-  fatorPadraoConstrutivo: number;
-}
-
-export interface AnaliseOfertas {
-  amostra: number;
-  precoM2Mediana: number;
-  precoM2Media: number;
-  nivelFiltro: string;
-  precoOfertadoEstimado: number;
-  comparaveis: EstatisticasOfertas["comparaveis"];
-}
-
-export type Classificacao = "abaixo_do_mercado" | "dentro_do_mercado" | "acima_do_mercado";
 
 export interface AvaliacaoPrecoDesejado {
   precoDesejado: number;
@@ -78,16 +45,13 @@ export interface AvaliacaoPrecoDesejado {
   classificacao: Classificacao;
 }
 
-export interface ResultadoPrecificacao {
-  input: InputPrecificacao;
-  vendas: AnaliseVendas | null;
-  ofertas: AnaliseOfertas | null;
-  indiceDesvio: number | null;
-  classificacao: Classificacao | null;
-  /** Só preenchido quando o usuário informa precoDesejado E temos preço
-   *  justo (ITBI) calculado — compara o valor que ele quer pedir com o
-   *  preço justo, usando o mesmo critério de classificação. */
+export interface ResultadoPrecificacao extends ResultadoPtam {
+  /** Só preenchido quando o usuário informa precoDesejado E o motor PTAM
+   *  chegou a um valor adotado — compara o valor que ele quer pedir com o
+   *  valor adotado, usando o mesmo critério de classificação. */
   avaliacaoPrecoDesejado: AvaliacaoPrecoDesejado | null;
+  /** Avisos nossos, de cobertura de dados — além dos "alertas" do motor PTAM
+   *  (que são regra de negócio: CV alto, amostra mínima). */
   avisos: string[];
 }
 
@@ -100,53 +64,49 @@ function classificar(indiceDesvio: number): Classificacao {
 export function calcularPrecificacao(input: InputPrecificacao): ResultadoPrecificacao {
   const avisos: string[] = [];
 
-  let vendas: AnaliseVendas | null = null;
-  if (normalizarTexto(input.cidade) === normalizarTexto(CIDADE_COBERTA_PELO_ITBI)) {
-    const stats = estatisticasVendas(input.bairro, input.tipo);
-    if (stats) {
-      const fatorEstadoConservacao = input.estadoConservacao ? FATOR_ESTADO_CONSERVACAO[input.estadoConservacao] : 1;
-      const fatorPadraoConstrutivo = input.padraoConstrutivo ? FATOR_PADRAO_CONSTRUTIVO[input.padraoConstrutivo] : 1;
-      vendas = {
-        ...stats,
-        precoJustoEstimado: stats.precoM2Mediana * input.areaM2 * fatorEstadoConservacao * fatorPadraoConstrutivo,
-        fatorEstadoConservacao,
-        fatorPadraoConstrutivo,
-      };
-    } else {
-      avisos.push(`Amostra insuficiente de vendas (ITBI) para o bairro/tipo informado.`);
-    }
-  } else {
+  if (normalizarTexto(input.cidade) !== normalizarTexto(CIDADE_COBERTA_PELO_ITBI)) {
     avisos.push(
-      `Dados de vendas (ITBI) cobrem apenas ${CIDADE_COBERTA_PELO_ITBI}; sem referência de vendas para "${input.cidade}".`,
+      `Dados de vendas (ITBI) cobrem apenas ${CIDADE_COBERTA_PELO_ITBI}; para "${input.cidade}" o motor usa só comparáveis de oferta (RGI).`,
     );
   }
 
-  let ofertas: AnaliseOfertas | null = null;
-  const statsOfertas = estatisticasOfertas(input);
-  if (statsOfertas) {
-    ofertas = { ...statsOfertas, precoOfertadoEstimado: statsOfertas.precoM2Mediana * input.areaM2 };
-  } else {
-    avisos.push(`Amostra insuficiente de ofertas (Jetlar) para o bairro/tipo informado.`);
-  }
+  const comparaveis = montarComparaveis(input.cidade, input.bairro, input.tipo);
 
-  let indiceDesvio: number | null = null;
-  let classificacao: Classificacao | null = null;
-  if (vendas && ofertas) {
-    indiceDesvio = (ofertas.precoOfertadoEstimado - vendas.precoJustoEstimado) / vendas.precoJustoEstimado;
-    classificacao = classificar(indiceDesvio);
-  }
+  const avaliando: Avaliando = {
+    areaM2: input.areaM2,
+    estadoConservacao: input.estadoConservacao,
+    padraoConstrutivo: input.padraoConstrutivo,
+    possuiVaga: (input.vagas ?? 0) > 0,
+  };
+
+  const resultadoBruto = calcularValorPtam({
+    parametros: {
+      fatorOferta: FATOR_OFERTA_PADRAO,
+      valorVaga: VALOR_VAGA_PADRAO,
+      expoenteArea: EXPOENTE_AREA_PADRAO,
+    },
+    avaliando,
+    comparaveis,
+  });
+
+  // Nossos comparáveis reais (ITBI/RGI) nunca têm estado de conservação
+  // nem padrão construtivo próprios (ver comparaveis.ts) — o motor não pôde
+  // homogeneizar por comparável, então aplicamos a compensação agregada do
+  // avaliando aqui, sempre.
+  const resultado = aplicarAjusteAgregado(resultadoBruto, avaliando);
 
   let avaliacaoPrecoDesejado: AvaliacaoPrecoDesejado | null = null;
-  if (input.precoDesejado && vendas) {
-    const indiceDesvioDesejado = (input.precoDesejado - vendas.precoJustoEstimado) / vendas.precoJustoEstimado;
+  if (input.precoDesejado && resultado.resultado.valorAdotado) {
+    const valorAdotado = resultado.resultado.valorAdotado;
+    const indiceDesvio = (input.precoDesejado - valorAdotado) / valorAdotado;
     avaliacaoPrecoDesejado = {
       precoDesejado: input.precoDesejado,
-      indiceDesvio: indiceDesvioDesejado,
-      classificacao: classificar(indiceDesvioDesejado),
+      indiceDesvio,
+      classificacao: classificar(indiceDesvio),
     };
-  } else if (input.precoDesejado && !vendas) {
-    avisos.push("Não foi possível avaliar o preço desejado: sem preço justo (ITBI) calculado para comparação.");
+  } else if (input.precoDesejado) {
+    avisos.push("Não foi possível avaliar o preço desejado: motor PTAM não chegou a um valor adotado (ver status/motivoErro).");
   }
 
-  return { input, vendas, ofertas, indiceDesvio, classificacao, avaliacaoPrecoDesejado, avisos };
+  return { ...resultado, avaliacaoPrecoDesejado, avisos };
 }
