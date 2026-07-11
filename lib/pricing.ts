@@ -40,7 +40,8 @@ export interface ResultadoPrecificacao {
 
 interface RegistroITBI {
   cep: string
-  cep_prefix: string
+  cep_prefix: string  // primeiros 5 dígitos
+  cep_suffix: number  // últimos 3 dígitos como inteiro (0-899); -1 se indisponível
   bairro: string
   tipo: string
   area_m2: number
@@ -116,6 +117,7 @@ function carregarDados(): RegistroITBI[] {
       registros.push({
         cep,
         cep_prefix: cep.slice(0, 5),
+        cep_suffix: cep.length >= 8 ? parseInt(cep.slice(5, 8), 10) : -1,
         bairro,
         tipo,
         area_m2: area,
@@ -147,15 +149,31 @@ function filtrarComparaveis(
   dados: RegistroITBI[],
   tiposITBI: string[],
   cepPrefix: string,
+  cepSuffix: number,
   bairro: string,
 ): { registros: RegistroITBI[]; escopo: string } {
-  // Tier 1: mesmo CEP (5 dígitos) + tipo
-  const porCep = dados.filter(
+  // Tier 1: mesmo prefixo + sufixo ±50  (ex: CEP 90105-150 → 100 a 200)
+  if (cepSuffix >= 0) {
+    const rangeMin = Math.max(0, cepSuffix - 50)
+    const rangeMax = Math.min(899, cepSuffix + 50)
+    const rangeCurto = dados.filter(
+      (r) =>
+        r.cep_prefix === cepPrefix &&
+        r.cep_suffix >= 0 &&
+        r.cep_suffix >= rangeMin &&
+        r.cep_suffix <= rangeMax &&
+        tiposITBI.includes(r.tipo),
+    )
+    if (rangeCurto.length >= 5) return { registros: rangeCurto, escopo: 'cep_range_50' }
+  }
+
+  // Tier 2: mesmo prefixo, qualquer sufixo 000-899 (setor inteiro)
+  const rangeCompleto = dados.filter(
     (r) => r.cep_prefix === cepPrefix && tiposITBI.includes(r.tipo),
   )
-  if (porCep.length >= 10) return { registros: porCep, escopo: 'cep' }
+  if (rangeCompleto.length >= 5) return { registros: rangeCompleto, escopo: 'cep_setor' }
 
-  // Tier 2: mesmo bairro + tipo
+  // Tier 3: mesmo bairro + tipo
   if (bairro) {
     const porBairro = dados.filter(
       (r) => r.bairro === bairro && tiposITBI.includes(r.tipo),
@@ -163,7 +181,7 @@ function filtrarComparaveis(
     if (porBairro.length >= 5) return { registros: porBairro, escopo: 'bairro' }
   }
 
-  // Tier 3: cidade inteira + tipo (baixa confiança)
+  // Tier 4: cidade inteira + tipo (baixa confiança)
   const porTipo = dados.filter((r) => tiposITBI.includes(r.tipo))
   return { registros: porTipo, escopo: 'cidade' }
 }
@@ -172,12 +190,14 @@ export async function calcularPrecificacao(dados: DadosImovel): Promise<Resultad
   const registros = carregarDados()
   const tiposITBI = ITBI_TYPE_MAP[dados.tipo]
   const cepPrefix = dados.cep.slice(0, 5)
+  const cepSuffix = dados.cep.length >= 8 ? parseInt(dados.cep.slice(5, 8), 10) : -1
   const bairro = encontrarBairro(registros, cepPrefix)
 
   const { registros: comparaveis, escopo } = filtrarComparaveis(
     registros,
     tiposITBI,
     cepPrefix,
+    cepSuffix,
     bairro,
   )
 
@@ -213,16 +233,19 @@ export async function calcularPrecificacao(dados: DadosImovel): Promise<Resultad
   }
 
   const precoEstimado = Math.round(precoMedioM2 * dados.area_m2)
-  const margem = escopo === 'cep' ? 0.1 : escopo === 'bairro' ? 0.15 : 0.25
+
+  const margem =
+    escopo === 'cep_range_50' ? 0.10 :
+    escopo === 'cep_setor'    ? 0.15 :
+    escopo === 'bairro'       ? 0.20 :
+    0.25 // cidade
 
   const confianca =
-    comparaveis.length >= 30 && escopo === 'cep'
-      ? 'ALTA'
-      : comparaveis.length >= 10 && escopo !== 'cidade'
-        ? 'MEDIA'
-        : comparaveis.length >= 5
-          ? 'BAIXA'
-          : 'INSUFICIENTE'
+    comparaveis.length >= 10 && escopo === 'cep_range_50' ? 'ALTA' :
+    comparaveis.length >= 5  && escopo === 'cep_range_50' ? 'MEDIA' :
+    comparaveis.length >= 10 && escopo === 'cep_setor'    ? 'MEDIA' :
+    comparaveis.length >= 5                               ? 'BAIXA' :
+    'INSUFICIENTE'
 
   return {
     preco_estimado: precoEstimado,

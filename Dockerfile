@@ -7,7 +7,7 @@ WORKDIR /app
 FROM base AS deps
 COPY package.json package-lock.json ./
 COPY prisma ./prisma
-RUN npm ci
+RUN npm install && npm install csv-parse
 
 # --- dev (hot-reload) --------------------------------------------------------
 FROM base AS dev
