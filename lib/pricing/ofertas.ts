@@ -19,6 +19,8 @@ interface OfertaImovel {
   tipo: string;
   quartos: number | null;
   vagas: number | null;
+  banheiros: number | null;
+  suites: number | null;
   mobiliado: boolean | null;
   areaM2: number;
   preco: number;
@@ -79,6 +81,8 @@ function carregarOfertas(): OfertaImovel[] {
         tipo: registro.tipo ?? "",
         quartos: numeroOuNull(registro.quartos),
         vagas: numeroOuNull(registro.vagas),
+        banheiros: numeroOuNull(registro.banheiros),
+        suites: numeroOuNull(registro.suites),
         mobiliado: registro.mobiliado === "true" ? true : registro.mobiliado === "false" ? false : null,
         areaM2: areaDaOferta(registro) ?? 0,
         preco: numeroOuNull(registro.preco) ?? 0,
@@ -94,8 +98,16 @@ export interface EstatisticasOfertas {
   amostra: number;
   precoM2Mediana: number;
   precoM2Media: number;
-  nivelFiltro: "bairro+tipo+quartos+vagas+mobiliado" | "bairro+tipo+quartos+vagas" | "bairro+tipo+quartos" | "bairro+tipo";
-  comparaveis: Array<Pick<OfertaImovel, "id" | "titulo" | "quartos" | "vagas" | "mobiliado" | "areaM2" | "preco" | "url">>;
+  nivelFiltro: string;
+  comparaveis: Array<
+    Pick<OfertaImovel, "id" | "titulo" | "quartos" | "vagas" | "banheiros" | "suites" | "mobiliado" | "areaM2" | "preco" | "url">
+  >;
+}
+
+interface CriterioOpcional {
+  chave: string;
+  ativo: boolean;
+  bate: (oferta: OfertaImovel) => boolean;
 }
 
 export function estatisticasOfertas(params: {
@@ -103,9 +115,11 @@ export function estatisticasOfertas(params: {
   bairro: string;
   tipo: string;
   quartos: number;
-  // Vagas e mobiliado são opcionais: quando não informados, esse critério é
-  // simplesmente ignorado no filtro em vez de forçar um valor (ex: "sem vaga").
+  // Todos opcionais: quando não informado, o critério é simplesmente
+  // ignorado no filtro em vez de forçar um valor (ex: "sem vaga").
   vagas?: number;
+  banheiros?: number;
+  suites?: number;
   mobiliado?: boolean;
 }): EstatisticasOfertas | null {
   const ofertas = carregarOfertas();
@@ -114,19 +128,35 @@ export function estatisticasOfertas(params: {
   const doBairro = daCidade.filter((oferta) => bairrosCorrespondem(oferta.bairro, params.bairro));
   const doTipo = doBairro.filter((oferta) => normalizarTexto(oferta.tipo) === normalizarTexto(params.tipo));
 
-  const bateQuartos = (oferta: OfertaImovel) => oferta.quartos === params.quartos;
-  const bateVagas = (oferta: OfertaImovel) => params.vagas === undefined || oferta.vagas === params.vagas;
-  const bateMobiliado = (oferta: OfertaImovel) => params.mobiliado === undefined || oferta.mobiliado === params.mobiliado;
-
-  const tentativas: Array<{ nivel: EstatisticasOfertas["nivelFiltro"]; itens: OfertaImovel[] }> = [
+  // Ordem de prioridade (mais importante primeiro) — ao relaxar o filtro por
+  // amostra insuficiente, o critério menos importante (último da lista) é
+  // descartado primeiro.
+  const todosCriterios: CriterioOpcional[] = [
     {
-      nivel: "bairro+tipo+quartos+vagas+mobiliado",
-      itens: doTipo.filter((o) => bateQuartos(o) && bateVagas(o) && bateMobiliado(o)),
+      chave: "mobiliado",
+      ativo: params.mobiliado !== undefined,
+      bate: (o: OfertaImovel) => o.mobiliado === params.mobiliado,
     },
-    { nivel: "bairro+tipo+quartos+vagas", itens: doTipo.filter((o) => bateQuartos(o) && bateVagas(o)) },
-    { nivel: "bairro+tipo+quartos", itens: doTipo.filter(bateQuartos) },
-    { nivel: "bairro+tipo", itens: doTipo },
+    { chave: "vagas", ativo: params.vagas !== undefined, bate: (o: OfertaImovel) => o.vagas === params.vagas },
+    {
+      chave: "banheiros",
+      ativo: params.banheiros !== undefined,
+      bate: (o: OfertaImovel) => o.banheiros === params.banheiros,
+    },
+    { chave: "suites", ativo: params.suites !== undefined, bate: (o: OfertaImovel) => o.suites === params.suites },
   ];
+  const criteriosOpcionais = todosCriterios.filter((c) => c.ativo);
+
+  const tentativas: Array<{ nivel: string; itens: OfertaImovel[] }> = [];
+  for (let i = criteriosOpcionais.length; i >= 0; i--) {
+    const emUso = criteriosOpcionais.slice(0, i);
+    const nivel = ["bairro", "tipo", "quartos", ...emUso.map((c) => c.chave)].join("+");
+    tentativas.push({
+      nivel,
+      itens: doTipo.filter((o) => o.quartos === params.quartos && emUso.every((c) => c.bate(o))),
+    });
+  }
+  tentativas.push({ nivel: "bairro+tipo", itens: doTipo });
 
   for (const tentativa of tentativas) {
     const precosM2 = tentativa.itens.map((oferta) => oferta.preco / oferta.areaM2);
@@ -139,11 +169,13 @@ export function estatisticasOfertas(params: {
         nivelFiltro: tentativa.nivel,
         comparaveis: tentativa.itens
           .slice(0, 5)
-          .map(({ id, titulo, quartos, vagas, mobiliado, areaM2, preco, url }) => ({
+          .map(({ id, titulo, quartos, vagas, banheiros, suites, mobiliado, areaM2, preco, url }) => ({
             id,
             titulo,
             quartos,
             vagas,
+            banheiros,
+            suites,
             mobiliado,
             areaM2,
             preco,

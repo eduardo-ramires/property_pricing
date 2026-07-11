@@ -14,6 +14,8 @@ interface FormState {
   preco_desejado: string
   quartos: string
   vaga_garagem: string
+  banheiros: string
+  suites: string
   estado_conservacao: EstadoConservacao | ''
   padrao_construtivo: PadraoConstrutivo | ''
 }
@@ -134,6 +136,8 @@ const EMPTY_FORM: FormState = {
   preco_desejado: '',
   quartos: '',
   vaga_garagem: '',
+  banheiros: '',
+  suites: '',
   estado_conservacao: '',
   padrao_construtivo: '',
 }
@@ -213,6 +217,8 @@ export default function PrecificarPage() {
         estadoConservacao: estadoConservacao?.servico,
         padraoConstrutivo: padraoConstrutivo?.servico,
         ...(form.vaga_garagem ? { vagas: parseInt(form.vaga_garagem, 10) } : {}),
+        ...(form.banheiros ? { banheiros: parseInt(form.banheiros, 10) } : {}),
+        ...(form.suites ? { suites: parseInt(form.suites, 10) } : {}),
         ...(form.preco_desejado ? { precoDesejado: parseFloat(form.preco_desejado) } : {}),
       }
 
@@ -260,13 +266,14 @@ export default function PrecificarPage() {
 
   return (
     <div className="min-h-screen bg-[#f3f4f6] flex flex-col">
-      {/* Topbar */}
+      {/* Topbar — logo trocada aqui como preview de uma feature futura (integração com o Jetimob CRM) */}
       <header className="bg-[#284670] h-[55px] flex items-center px-6 shrink-0 shadow-sm">
-        <span className="text-white font-bold text-base tracking-tight select-none">PrecificaJusta</span>
+        {/* eslint-disable-next-line @next/next/no-img-element -- svg estático simples, sem otimização necessária */}
+        <img src="/imagens/logo_jetimob_crm_light.svg" alt="Jetimob CRM" className="h-6 w-auto" />
       </header>
 
       {/* Main content */}
-      <main className="flex-1 w-full px-6 py-6 max-w-3xl mx-auto">
+      <main className="flex-1 w-full px-6 py-6">
         <h1 className="text-xl font-bold text-[#111827] mb-1">Precificar Imóvel</h1>
         <p className="text-xs text-[#6b7280] mb-5">
           Comparamos vendas reais (ITBI) com ofertas ativas (Jetlar) para Porto Alegre. O bairro é resolvido
@@ -393,11 +400,11 @@ export default function PrecificarPage() {
           </div>
 
           <div className={`px-6 py-5 ${step < 1 ? 'pointer-events-none select-none' : ''}`}>
-            {/* Quartos + Vaga de garagem */}
-            <div className="grid grid-cols-2 gap-4 mb-4">
+            {/* Quartos, vagas, banheiros e suítes */}
+            <div className="grid grid-cols-4 gap-3 mb-4">
               <div>
                 <label className="block text-xs font-medium text-[#111827] mb-1.5">
-                  Número de quartos <span className="text-red-500">*</span>
+                  Quartos <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="number"
@@ -413,7 +420,7 @@ export default function PrecificarPage() {
               </div>
               <div>
                 <label className="block text-xs font-medium text-[#111827] mb-1.5">
-                  Vaga de garagem <span className="text-[11px] text-[#6b7280]">opcional</span>
+                  Vagas <span className="text-[11px] text-[#6b7280]">opcional</span>
                 </label>
                 <input
                   type="number"
@@ -422,6 +429,36 @@ export default function PrecificarPage() {
                   placeholder="0"
                   value={form.vaga_garagem}
                   onChange={(e) => set('vaga_garagem', e.target.value)}
+                  disabled={step < 1}
+                  className={inputClass()}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-[#111827] mb-1.5">
+                  Banheiros <span className="text-[11px] text-[#6b7280]">opcional</span>
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  placeholder="0"
+                  value={form.banheiros}
+                  onChange={(e) => set('banheiros', e.target.value)}
+                  disabled={step < 1}
+                  className={inputClass()}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-[#111827] mb-1.5">
+                  Suítes <span className="text-[11px] text-[#6b7280]">opcional</span>
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  placeholder="0"
+                  value={form.suites}
+                  onChange={(e) => set('suites', e.target.value)}
                   disabled={step < 1}
                   className={inputClass()}
                 />

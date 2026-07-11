@@ -38,6 +38,8 @@ export interface InputPrecificacao {
   areaM2: number;
   quartos: number;
   vagas?: number;
+  banheiros?: number;
+  suites?: number;
   mobiliado?: boolean;
   /** Ajustam o preço justo (base ITBI) para refletir o imóvel específico —
    *  sem informar, o preço justo fica na média/mediana "crua" da região. */

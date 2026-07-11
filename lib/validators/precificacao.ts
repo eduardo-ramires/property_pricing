@@ -10,6 +10,8 @@ export const precificacaoInputSchema = z.object({
   areaM2: z.number().positive("areaM2 deve ser maior que zero"),
   quartos: z.number().int().nonnegative(),
   vagas: z.number().int().nonnegative().optional(),
+  banheiros: z.number().int().nonnegative().optional(),
+  suites: z.number().int().nonnegative().optional(),
   mobiliado: z.boolean().optional(),
   estadoConservacao: z.enum(ESTADOS_CONSERVACAO).optional(),
   padraoConstrutivo: z.enum(PADROES_CONSTRUTIVOS).optional(),
