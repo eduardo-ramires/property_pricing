@@ -18,6 +18,8 @@ interface FormState {
   suites: string
   estado_conservacao: EstadoConservacao | ''
   padrao_construtivo: PadraoConstrutivo | ''
+  condominio_mensal: string
+  iptu_anual: string
 }
 
 interface MemoriaCalculoItem {
@@ -46,6 +48,32 @@ interface AvaliacaoPrecoDesejado {
   classificacao: Classificacao
 }
 
+interface CteCenario {
+  tMeses: number
+  cft: number
+  co: number
+  cte: number
+  valorFuturoInvestido: number
+  posicaoComparativa: number
+  veredicto?: 'COMPENSA_ESPERAR' | 'NAO_COMPENSA'
+  frase: string
+}
+
+interface CteComparativo {
+  ganhoPretendido: number
+  breakevenMeses: number | null
+  veredictoGeral: 'BREAKEVEN_ENCONTRADO' | 'GANHO_SUPERA_HORIZONTE' | 'SEM_GANHO_A_PERSEGUIR'
+  frase: string
+}
+
+interface CteResult {
+  taxa: { cdiAa: number; taxaMensal: number; fonte: string; dataReferencia: string }
+  baseCo: { tipo: 'vd' | 'vp'; valor: number }
+  cenarios: CteCenario[]
+  comparativo?: CteComparativo
+  disclaimers: string[]
+}
+
 interface ResultadoPrecificacao {
   status: 'ok' | 'alerta' | 'erro'
   alertas: string[]
@@ -70,6 +98,7 @@ interface ResultadoPrecificacao {
   ruleVersion: string
   avaliacaoPrecoDesejado: AvaliacaoPrecoDesejado | null
   avisos: string[]
+  cte: CteResult | null
 }
 
 const MOTIVO_ERRO_LABEL: Record<string, string> = {
@@ -154,6 +183,8 @@ const EMPTY_FORM: FormState = {
   suites: '',
   estado_conservacao: '',
   padrao_construtivo: '',
+  condominio_mensal: '',
+  iptu_anual: '',
 }
 
 export default function PrecificarPage() {
@@ -233,6 +264,8 @@ export default function PrecificarPage() {
         ...(form.banheiros ? { banheiros: parseInt(form.banheiros, 10) } : {}),
         ...(form.suites ? { suites: parseInt(form.suites, 10) } : {}),
         ...(form.preco_desejado ? { precoDesejado: parseFloat(form.preco_desejado) } : {}),
+        ...(form.condominio_mensal ? { condominioMensal: parseFloat(form.condominio_mensal) } : {}),
+        ...(form.iptu_anual ? { iptuAnual: parseFloat(form.iptu_anual) } : {}),
       }
 
       const res = await fetch('/api/precificacao', {
@@ -290,7 +323,7 @@ export default function PrecificarPage() {
       </header>
 
       {/* Main content */}
-      <main className="flex-1 w-full px-6 py-6">
+      <main className="flex-1 w-full px-6 py-6 pb-24">
         <h1 className="text-xl font-bold text-[#111827] mb-1">Precificar Imóvel</h1>
 
         {/* ── STEP 0 — Dados Básicos ── */}
@@ -534,6 +567,43 @@ export default function PrecificarPage() {
               )}
             </div>
 
+            {/* Encargos financeiros */}
+            <div className="mt-6 pt-5 border-t border-[#e5e7eb]">
+              <p className="text-xs font-semibold text-[#111827] mb-3">Encargos financeiros</p>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-[#111827] mb-1.5">
+                    Condomínio mensal (R$) <span className="text-[11px] text-[#6b7280]">opcional</span>
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    placeholder="Ex: 800"
+                    value={form.condominio_mensal}
+                    onChange={(e) => set('condominio_mensal', e.target.value)}
+                    disabled={step < 1}
+                    className={inputClass()}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-[#111827] mb-1.5">
+                    IPTU anual (R$) <span className="text-[11px] text-[#6b7280]">opcional</span>
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    placeholder="Ex: 2400"
+                    value={form.iptu_anual}
+                    onChange={(e) => set('iptu_anual', e.target.value)}
+                    disabled={step < 1}
+                    className={inputClass()}
+                  />
+                </div>
+              </div>
+            </div>
+
             {step >= 1 && (
               <div className="flex items-center justify-between mt-5 pt-4 border-t border-[#e5e7eb]">
                 <button
@@ -577,6 +647,7 @@ export default function PrecificarPage() {
 
         {/* ── Resultado ── */}
         {resultado && (
+          <>
           <div className="bg-white rounded-md border border-[#e5e7eb] shadow-sm overflow-hidden">
             <div className="px-6 py-3.5 border-b border-[#e5e7eb] flex items-center justify-between">
               <h2 className="text-sm font-semibold text-[#111827]">Resultado da Precificação</h2>
@@ -738,7 +809,161 @@ export default function PrecificarPage() {
               )}
             </div>
 
-            <div className="px-6 pb-5 flex justify-end">
+            {!resultado.cte && (
+              <div className="px-6 pb-5 flex justify-end">
+                <button
+                  type="button"
+                  onClick={handleNovaPrecificacao}
+                  className="px-4 py-2 text-sm font-medium rounded border border-[#284670] text-[#284670] bg-white hover:bg-[#f0f4f9] transition-colors"
+                >
+                  + Nova precificação
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* ── Custo da Espera (CTE) ── */}
+          {resultado.cte && (
+            <div className="mt-4 bg-white rounded-md border border-[#e5e7eb] shadow-sm overflow-hidden">
+              {/* Header */}
+              <div className="px-6 py-3.5 border-b border-[#e5e7eb] flex items-center justify-between gap-4">
+                <div>
+                  <h2 className="text-sm font-semibold text-[#111827]">Custo da Espera</h2>
+                  <p className="text-[11px] text-[#6b7280] mt-0.5">
+                    Quanto custa ao proprietário manter o imóvel parado esperando pelo preço desejado
+                  </p>
+                </div>
+                <span className="shrink-0 text-[11px] text-[#6b7280] bg-[#f3f4f6] border border-[#e5e7eb] px-2.5 py-1 rounded-full whitespace-nowrap">
+                  CDI {resultado.cte.taxa.cdiAa.toFixed(2)}% a.a. · {resultado.cte.taxa.dataReferencia}
+                </span>
+              </div>
+
+              <div className="px-6 py-5">
+                {/* Três cenários */}
+                <div className="grid grid-cols-3 gap-3 mb-5">
+                  {resultado.cte.cenarios.map((c, i) => {
+                    const isRed = c.veredicto === 'NAO_COMPENSA'
+                    const isGreen = c.veredicto === 'COMPENSA_ESPERAR'
+                    return (
+                      <div
+                        key={c.tMeses}
+                        className={`rounded-lg border-2 p-4 flex flex-col transition-colors ${
+                          isRed
+                            ? 'border-red-200 bg-red-50'
+                            : isGreen
+                              ? 'border-green-200 bg-green-50'
+                              : i === 1
+                                ? 'border-[#284670]/20 bg-[#f0f4f9]'
+                                : 'border-[#e5e7eb] bg-[#f9fafb]'
+                        }`}
+                      >
+                        <p className="text-[10px] font-bold text-[#6b7280] uppercase tracking-widest mb-2">
+                          {c.tMeses} meses
+                        </p>
+
+                        <p
+                          className={`text-2xl font-bold leading-none mb-0.5 ${
+                            isRed ? 'text-red-700' : isGreen ? 'text-green-700' : 'text-[#111827]'
+                          }`}
+                        >
+                          {formatBRL(c.cte)}
+                        </p>
+                        <p className="text-[11px] text-[#6b7280] mb-3">custo total</p>
+
+                        <div className="space-y-1.5 text-[11px] flex-1">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-[#6b7280]">Cond. + IPTU</span>
+                            <span className="font-medium text-[#374151] tabular-nums">{formatBRL(c.cft)}</span>
+                          </div>
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-[#6b7280]">Oportunidade (CDI)</span>
+                            <span className="font-medium text-[#374151] tabular-nums">{formatBRL(c.co)}</span>
+                          </div>
+                        </div>
+
+                        {c.veredicto && (
+                          <div className="mt-3 pt-3 border-t border-current/10">
+                            <span
+                              className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                                isGreen ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                              }`}
+                            >
+                              <span
+                                className={`w-1.5 h-1.5 rounded-full ${isGreen ? 'bg-green-500' : 'bg-red-500'}`}
+                              />
+                              {isGreen ? 'Vale esperar' : 'Não compensa'}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+
+                {/* Breakeven / Comparativo */}
+                {resultado.cte.comparativo &&
+                  resultado.cte.comparativo.veredictoGeral !== 'SEM_GANHO_A_PERSEGUIR' && (
+                    <div
+                      className={`rounded-md px-4 py-3 flex items-start gap-3 mb-4 ${
+                        resultado.cte.comparativo.veredictoGeral === 'GANHO_SUPERA_HORIZONTE'
+                          ? 'bg-blue-50 border border-blue-200'
+                          : 'bg-amber-50 border border-amber-200'
+                      }`}
+                    >
+                      <svg
+                        className={`w-4 h-4 shrink-0 mt-0.5 ${
+                          resultado.cte.comparativo.veredictoGeral === 'GANHO_SUPERA_HORIZONTE'
+                            ? 'text-blue-500'
+                            : 'text-amber-500'
+                        }`}
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                        strokeWidth={2}
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                        />
+                      </svg>
+                      <div>
+                        <p className="text-sm font-semibold text-[#111827] mb-0.5">
+                          {resultado.cte.comparativo.breakevenMeses !== null
+                            ? `Ponto de virada: ~${resultado.cte.comparativo.breakevenMeses} meses`
+                            : 'O ganho supera o custo em qualquer horizonte'}
+                        </p>
+                        <p className="text-xs text-[#374151] leading-relaxed">
+                          {resultado.cte.comparativo.frase}
+                        </p>
+                        {resultado.cte.comparativo.ganhoPretendido > 0 && (
+                          <p className="text-[11px] text-[#6b7280] mt-1">
+                            Ganho pretendido:{' '}
+                            <span className="font-medium text-[#374151]">
+                              {formatBRL(resultado.cte.comparativo.ganhoPretendido)}
+                            </span>
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                {/* Disclaimers */}
+                <p className="text-[10px] text-[#9ca3af] leading-relaxed">
+                  {resultado.cte.disclaimers.join(' ')}
+                  {resultado.cte.taxa.fonte !== 'sgs' && (
+                    <span className="ml-1">
+                      (Taxa via {resultado.cte.taxa.fonte === 'cache' ? 'cache local' : 'valor fixo de referência'} —
+                      API do Banco Central indisponível no momento.)
+                    </span>
+                  )}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {resultado.cte && (
+            <div className="flex justify-end mt-4">
               <button
                 type="button"
                 onClick={handleNovaPrecificacao}
@@ -747,7 +972,8 @@ export default function PrecificarPage() {
                 + Nova precificação
               </button>
             </div>
-          </div>
+          )}
+          </>
         )}
       </main>
     </div>

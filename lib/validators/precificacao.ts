@@ -18,6 +18,8 @@ export const precificacaoInputSchema = z.object({
   estadoConservacao: z.enum(ESTADOS_CONSERVACAO, { error: "estadoConservacao é obrigatório" }),
   padraoConstrutivo: z.enum(PADROES_CONSTRUTIVOS, { error: "padraoConstrutivo é obrigatório" }),
   precoDesejado: z.number().positive("precoDesejado deve ser maior que zero").optional(),
+  condominioMensal: z.number().nonnegative().optional(),
+  iptuAnual: z.number().nonnegative().optional(),
 });
 
 export type PrecificacaoInput = z.infer<typeof precificacaoInputSchema>;
